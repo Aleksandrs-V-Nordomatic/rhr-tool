@@ -37,15 +37,23 @@ class TheTwoRulesThePrefixComesWith(unittest.TestCase):
     def test_the_path_is_made_absolute(self):
         self.assertTrue(os.path.isabs(normalize.plainpath(normalize.fspath("a/b"))))
 
-    def test_no_forward_slash_survives(self):
+    def test_only_the_platforms_own_separator_survives(self):
         """The rule that is easy to satisfy by accident and easy to break by accident.
 
         A prefixed path containing a forward slash is not the file anybody meant; it is a
         file that does not exist. Both places where a logical address — joined with forward
         slashes on purpose, because it travels into the manifest — becomes a real path have
         to go through here.
+
+        Asserted as "no FOREIGN separator" rather than as "no forward slash", because the
+        second sentence is only true on Windows and this test has to mean something on the
+        machine the tool actually runs on. `os.altsep` is `/` on Windows and None elsewhere,
+        which is exactly the distinction being made.
         """
-        self.assertNotIn("/", normalize.plainpath(normalize.fspath("a/b/c/d")))
+        real = normalize.plainpath(normalize.fspath("a/b/c/d"))
+        self.assertIn(os.sep, real)
+        if os.altsep:
+            self.assertNotIn(os.altsep, real)
 
     def test_applying_it_twice_changes_nothing(self):
         once = normalize.fspath("a/b")
