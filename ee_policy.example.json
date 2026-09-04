@@ -1,0 +1,28 @@
+{
+  "_what": "Example Estonian recall policy. Copy this shape into the EE_POLICY secret; do not commit a real one.",
+  "_rule": "Excluded term in either text, or a code set entirely inside excluded divisions => drop. No text at all => keep. Otherwise keep when either text contains a recall_title_terms root. Codes never veto matching text.",
+  "_surfaces": "Two texts are read, not one: the title AND the Estonian name of the classification the buyer chose. The search this runs against carries no description at all and no classification code, so these two are everything the gate has before a byte moves.",
+  "_roots": "Estonian inflects heavily, so every term is written as a stem and matched as a substring: `paljundu` catches paljundus, paljunduse, paljundamine. Watch for stems that hide inside unrelated words — a short one will match something nobody meant.",
+  "_note": "The terms below are an unrelated illustration (office printing) chosen so that this file discloses nothing about any deployment's interests.",
+  "recall_title_terms": [
+    "printer",
+    "paljundu",
+    "trükiteenu",
+    "kontoritarv"
+  ],
+  "hard_exclude_prefixes": [
+    "30"
+  ],
+  "hard_exclude_title_terms": [
+    "kassett",
+    "tooner"
+  ],
+  "_overrides": "Codes read anyway, wherever their division sits: a contract can carry a main code inside an excluded division and nothing else, and a buyer files a purchase under the service it is bought as rather than the thing it is.",
+  "override_prefixes": [
+    "30199"
+  ],
+  "_recall_codes": "Codes that recall on their own, for the procurement whose title is vague and whose code is exact. Exclusions still bind: this widens what is fetched and can never drop anything. Note that the search row carries no code, so these apply only where a code is already known.",
+  "recall_cpv_prefixes": [
+    "79810"
+  ]
+}
