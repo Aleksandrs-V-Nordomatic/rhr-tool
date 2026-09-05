@@ -79,7 +79,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     here would silently stop answering the question the card is open for.
     """
     run_id = run_id or time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    date_from = date_to and date or date
+    date_from = date
     date_to = date_to or date
     # The folder is named for the end of the range, so a reader who knows where yesterday
     # landed knows where a three-day catch-up landed too.
@@ -96,7 +96,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     # rather than refused, and the answer is then simply nothing that matches. Left unsaid it
     # becomes a green run, a complete day, an empty morning, and nothing to tell it from a
     # holiday.
-    span = ee_targets._days(date_from, date_to)
+    span = ee_targets.days(date_from, date_to)
     discovery_failed = any(_working_day(d) for d in span) and not targets
 
     if keep:

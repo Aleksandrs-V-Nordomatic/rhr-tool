@@ -84,8 +84,13 @@ def _search(criteria, session=None):
     return rows
 
 
-def _days(date_from, date_to):
-    """Every calendar day the caller asked about, inclusive of both ends."""
+def days(date_from, date_to):
+    """Every calendar day the caller asked about, inclusive of both ends.
+
+    Public because the day driver asks the same question of a window — whether any working day is
+    in it, which is what makes an empty answer a broken crawl rather than a quiet country. Two
+    modules deriving that list separately is two places for the arithmetic to differ.
+    """
     start = datetime.date(*(int(p) for p in date_from.split("-")))
     end = datetime.date(*(int(p) for p in date_to.split("-")))
     if end < start:
@@ -126,7 +131,7 @@ def window(date_from, date_to=None, session=None):
     day that contains the whole register.
     """
     date_to = date_to or date_from
-    wanted = set(_days(date_from, date_to))
+    wanted = set(days(date_from, date_to))
     begin = (datetime.date(*(int(p) for p in date_from.split("-")))
              - datetime.timedelta(days=1)).isoformat()
     rows = _search({"procurementProcessRevealDateBegin": _iso(begin),
