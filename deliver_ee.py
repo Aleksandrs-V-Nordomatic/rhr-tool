@@ -303,20 +303,39 @@ def main(argv=None):
                   "client id or the client secret is wrong or expired (%s)"
                   % (code, type(exc).__name__), file=sys.stderr)
             return 2
+        # WHAT THIS CHECK IS FOR, AND WHAT IT IS NOT FOR. It stands in front of a night of
+        # downloads to catch the two failures that make the whole night worthless: a
+        # credential that has expired, and a drive or root that does not answer. Both are
+        # facts about the DESTINATION ROOT.
+        #
+        # It used to ask for the COUNTRY folder instead, and that conflated two states that
+        # need different answers. `work/LV` has existed for months, so a missing one there
+        # really does mean the root is misconfigured. For a country nobody has delivered yet
+        # the same signal means "first run" — and the check answered it by refusing, with a
+        # message blaming `GRAPH_DEST_ROOT`, which was correct. Every new country would have
+        # paid for that once, at the first step of its first night, and the folder is not
+        # even a precondition: Graph creates intermediate folders on an upload addressed by
+        # path, so the delivery makes it on the way past.
+        root = graph.env("GRAPH_DEST_ROOT").strip("/")
         try:
-            item = graph.item_at(drive, base, tok)
+            item = graph.item_at(drive, root, tok)
         except SystemExit as exc:
-            print("deliver_ee --check: the token worked but the drive did not answer for "
-                  "%s — GRAPH_DRIVE_ID is wrong, or the app has no access to it (%s)"
-                  % (code, exc), file=sys.stderr)
+            print("deliver_ee --check: the token worked but the drive did not answer — "
+                  "GRAPH_DRIVE_ID is wrong, or the app has no access to it (%s)"
+                  % exc, file=sys.stderr)
             return 2
         if item is None:
-            print("deliver_ee --check: reached the drive, but %s's folder is not there. "
-                  "GRAPH_DEST_ROOT names the folder that CONTAINS the country folders, "
-                  "and the country is appended by the tool." % code, file=sys.stderr)
+            print("deliver_ee --check: reached the drive, but the destination root is not "
+                  "there. GRAPH_DEST_ROOT names the folder that CONTAINS the country "
+                  "folders; the country is appended by the tool.", file=sys.stderr)
             return 2
-        print("delivery credentials OK for %s: the destination answers and holds %d item(s)"
-              % (code, (item.get("folder") or {}).get("childCount", 0)))
+        # Said out loud rather than left for somebody to infer from a count. A first
+        # delivery and a hundredth look identical in every other line this prints.
+        country_folder = graph.item_at(drive, base, tok)
+        where = ("holds %d item(s)" % (country_folder.get("folder") or {}).get("childCount", 0)
+                 if country_folder is not None
+                 else "has no folder for %s yet — this would be its first delivery" % code)
+        print("delivery credentials OK for %s: the destination answers and %s" % (code, where))
         return 0
 
     if not args.date:
