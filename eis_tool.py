@@ -191,9 +191,17 @@ def main(argv=None):
             day = json.load(fh)
         for row in day.get("tenders", []):
             home = os.path.join(root, "tenders", str(row["pid"]))
-            if os.path.isdir(home):
-                read_scans(home, model=args.model, limit=args.limit,
-                           provider=args.provider)
+            # A PROCUREMENT WITH NO PUBLIC DOCUMENTS HAS NO QUEUE, AND IS NOT A FAILURE.
+            # The register serves the notice and withholds the files often enough to matter,
+            # and `ee_fetch` correctly writes such a home with nothing under `normalized/`.
+            # Handing it to the lane anyway raised FileNotFoundError, which the lane caught
+            # and printed as `scan lane skipped — [Errno 2] …`. Nothing broke; the cost is
+            # that a night's log carries a line per document-less tender that reads exactly
+            # like the line a real failure prints, and the real one is what gets missed.
+            if not os.path.exists(os.path.join(home, "normalized",
+                                               "manifest_normalized.json")):
+                continue
+            read_scans(home, model=args.model, limit=args.limit, provider=args.provider)
         return 0
 
     if args.command == "doors":
