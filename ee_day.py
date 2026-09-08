@@ -203,7 +203,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
         # window needs to know which documents are worth opening and where to look inside them.
         scan = ee_scan.scan_home(home, rules[0] if rules else ())
         ee_scan.write(home, scan)
-        found = ee_scan.summary(scan)
+        scanned = ee_scan.summary(scan)
 
         record = None
         if changes_mod is not None and done.get("state") is not None:
@@ -223,7 +223,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
             # marked `unmatched` that the documents then prove ours is the one row worth
             # taking to the word list.
             "recall": target.get("recall"),
-            "scan": found,
+            "scan": scanned,
             "title": target["title"], "buyer": target["buyer"],
             "published": target["published"], "deadline": done.get("deadline"),
             "value": done.get("value"), "cpv_main": done.get("cpv_main"),
@@ -238,7 +238,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
             "watched": bool(target.get("watched")),
             "home": "tenders/%s" % pid,
             "documents": done["documents"], "bytes": done["bytes"],
-            "scan": found,
+            "scan": scanned,
             "title": target["title"],
         })
 
