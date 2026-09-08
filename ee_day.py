@@ -34,6 +34,7 @@ import time
 
 import ee_fetch
 import ee_page
+import ee_scan
 import ee_targets
 
 try:
@@ -195,6 +196,15 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
                            "reason": str(exc)[:200]})
             continue
 
+        # WHERE THE VOCABULARY ACTUALLY OCCURS, now that the whole window arrives. The terms
+        # were spent on titles until 8 Sep 2026 and decided what to fetch; applied to the text
+        # they finally have something to read. They still decide nothing — a procurement with no
+        # hit is delivered and judged exactly as one with fifty — but a reader with a whole
+        # window needs to know which documents are worth opening and where to look inside them.
+        scan = ee_scan.scan_home(home, rules[0] if rules else ())
+        ee_scan.write(home, scan)
+        found = ee_scan.summary(scan)
+
         record = None
         if changes_mod is not None and done.get("state") is not None:
             record = changes_mod.diff(previous, done["state"], date=folder, run_id=run_id)
@@ -213,6 +223,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
             # marked `unmatched` that the documents then prove ours is the one row worth
             # taking to the word list.
             "recall": target.get("recall"),
+            "scan": found,
             "title": target["title"], "buyer": target["buyer"],
             "published": target["published"], "deadline": done.get("deadline"),
             "value": done.get("value"), "cpv_main": done.get("cpv_main"),
@@ -227,6 +238,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
             "watched": bool(target.get("watched")),
             "home": "tenders/%s" % pid,
             "documents": done["documents"], "bytes": done["bytes"],
+            "scan": found,
             "title": target["title"],
         })
 
