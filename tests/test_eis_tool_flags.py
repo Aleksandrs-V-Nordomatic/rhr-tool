@@ -34,7 +34,8 @@ class Recorder(object):
                  "window": {"from": date, "to": date_to or date},
                  "coverage": {"delivered": 0, "targets": 0, "gated": 0, "failed": 0},
                  "counts": {"documents": 0, "tenders": 0, "recall_unmatched": 0},
-                 "discovery": {"requests": 1, "rows": 0, "at_cap": [], "gate": gate}}, {})
+                 "discovery": {"requests": 1, "discovered": 0, "worked": 0, "slices": [],
+                               "at_cap": [], "gate": gate}}, {})
 
 
 class DayPassesWhatItWasGiven(unittest.TestCase):
@@ -105,7 +106,9 @@ class AShortDayNamesWhatItLost(unittest.TestCase):
                  "window": {"from": date, "to": date_to or date},
                  "coverage": {"delivered": 5, "targets": 41, "gated": 35, "failed": 1},
                  "counts": {"documents": 30, "tenders": 41, "recall_unmatched": 20},
-                 "discovery": {"requests": 2, "rows": 41, "at_cap": [], "gate": gate},
+                 "discovery": {"requests": 2, "discovered": 41, "worked": 41,
+                               "slices": [{"from": date, "to": date, "rows": 41}],
+                               "at_cap": [], "gate": gate},
                  "lost": [{"ref": "314707", "pid": "10739244", "kind": None,
                            "watched": True,
                            "reason": "no procurement with this reference"}]}, {})

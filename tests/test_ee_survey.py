@@ -90,6 +90,14 @@ class AWindowThatOverflowsIsSplitUntilItFits(unittest.TestCase):
         pids = [r["pid"] for r in found["rows"]]
         self.assertEqual(len(set(pids)), 800)
 
+    def test_the_slices_add_up_to_the_rows(self):
+        # The census is only worth returning if a reader can check it by adding it up. A live
+        # run on 8 Sep 2026 reported five slices summing to a four-figure number beside a total
+        # of three, because the total had been taken after `--limit` trimmed the list.
+        register = Register(per_day=200)
+        found = ee_targets.survey("2026-08-01", "2026-08-04", register)
+        self.assertEqual(sum(s["rows"] for s in found["slices"]), len(found["rows"]))
+
     def test_the_slices_tile_the_window_exactly(self):
         register = Register(per_day=200)
         found = ee_targets.survey("2026-08-01", "2026-08-04", register)

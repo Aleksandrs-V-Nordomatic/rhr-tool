@@ -108,6 +108,11 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     # the arithmetic that proves nothing was truncated.
     found = ee_targets.survey(date_from, date_to)
     targets = found["rows"]
+    # WHAT THE REGISTER NAMED, taken before `--only` and `--limit` trim the list. The census
+    # below exists so a reader can add the slices up and see the window was whole; reporting
+    # the trimmed count beside them makes the sum disagree with the total on a trial run, and
+    # a census that does not add up is worse than none.
+    discovered = len(targets)
 
     # AN EMPTY WINDOW OVER WORKING DAYS IS A BROKEN CRAWL, AND NOTHING ELSE WOULD SAY SO.
     # This register publishes on the order of twenty-five notices a working day and none at
@@ -245,7 +250,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     # a request that came back at the cap was cut and `survey` would have split it instead.
     discovery = {"requests": found["requests"], "cap": found["cap"],
                  "slices": found["slices"], "at_cap": found["at_cap"],
-                 "rows": len(targets), "gate": gate}
+                 "discovered": discovered, "worked": len(targets), "gate": gate}
 
     common = {"date": folder, "window": {"from": date_from, "to": date_to},
               "country": "EE", "run_id": run_id,

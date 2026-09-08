@@ -233,9 +233,13 @@ def main(argv=None):
         # THE ARITHMETIC OF THE WINDOW, printed because "complete" is otherwise a word the run
         # applies to itself. The requests are the slices the register was asked for; none of
         # them may sit at the cap, because one that did was cut and would have been split.
-        print("  window: %d request(s), %d row(s), %d at the cap; recall matched %d, "
+        sliced = sum(s["rows"] for s in (disc.get("slices") or []))
+        worked = disc.get("worked", 0)
+        print("  window: %d request(s), %d row(s) named%s, %d at the cap; recall matched %d, "
               "unmatched %d, gate=%s"
-              % (disc.get("requests", 0), disc.get("rows", 0), len(disc.get("at_cap") or []),
+              % (disc.get("requests", 0), sliced,
+                 "" if worked == disc.get("discovered", worked) else " (%d worked)" % worked,
+                 len(disc.get("at_cap") or []),
                  day["counts"]["tenders"] - day["counts"].get("recall_unmatched", 0),
                  day["counts"].get("recall_unmatched", 0), disc.get("gate", "?")))
         # NAMED, NOT COUNTED. "5 of 41" is also what a heavily gated day looks like, so a
