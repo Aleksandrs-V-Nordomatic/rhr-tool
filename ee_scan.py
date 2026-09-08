@@ -42,16 +42,45 @@ CONTEXT_PER_DOCUMENT = 8
 CONTEXT_CHARS = 320
 
 
+def _fragment(term):
+    """One term as the policy wrote it, turned into a pattern that keeps its guard.
+
+    The policy writes a short term as ` ats ` so it cannot hide inside a longer word, and
+    `policy.fold` pads every text so those spaces behave. Carrying that convention across as
+    literal spaces would be wrong in one way and dropping it wrong in another: two padded
+    terms standing next to each other share one space, so a consuming match takes the first
+    and loses the second. Translating each edge into a zero-width boundary keeps the guard
+    and takes nothing, which is what a `` would do if Estonian folded text had word
+    boundaries where this needs them.
+    """
+    core = term.strip()
+    if not core:
+        return None
+    return ("(?<= )" if term[:1] == " " else "") + re.escape(core) +            ("(?= )" if term[-1:] == " " else "")
+
+
 def matcher(terms):
     """One compiled alternation for the whole vocabulary, longest term first.
 
-    Longest first matters: `automaatikakilp` and `automaatika` both match the same position,
-    and the reader learns more from being told the longer one was there.
+    Longest first matters twice. It is more informative — `hooneautomaatika` says more than
+    the `automaatika` inside it — and because the match consumes, the longer one also stops
+    the shorter being counted a second time at the same place.
+
+    **The terms are used exactly as the policy wrote them.** Stripping their spaces — which
+    this did until it was run against real documents on 8 Sep 2026 — turns the guard off:
+    `ats` then matches inside `Multiplatform` and `building` inside `capacity building`, and
+    a procurement for a mobile app outscores a hospital's automation. That is not a tuning
+    problem, it is the index reporting the opposite of the truth.
     """
-    usable = sorted({t.strip() for t in terms if t and t.strip()}, key=len, reverse=True)
-    if not usable:
+    fragments = []
+    for term in sorted({t for t in terms if t and t.strip()},
+                       key=lambda t: len(t.strip()), reverse=True):
+        fragment = _fragment(term)
+        if fragment:
+            fragments.append(fragment)
+    if not fragments:
         return None
-    return re.compile("|".join(re.escape(t) for t in usable))
+    return re.compile("|".join(fragments))
 
 
 def scan_text(text, pattern):

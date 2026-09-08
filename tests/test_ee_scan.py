@@ -85,6 +85,49 @@ class TheLongestTermWins(unittest.TestCase):
         self.assertEqual(scan["documents"][0]["terms"], ["hooneautomaatika"])
 
 
+class AShortTermKeepsTheGuardThePolicyGaveIt(unittest.TestCase):
+    """The failure that made this class exist, measured on a real Estonian day.
+
+    The policy writes a short term as ` ats ` so it cannot hide inside a longer word. The
+    first version of this module stripped those spaces, and the first live run ranked a
+    Kotlin mobile-app tender at 74 hits and a cybersecurity exercise package at 161 — above
+    every building in the window — on `ats` inside `Multiplatform` and `building` inside
+    `capacity building`. An index that confident and that wrong is worse than none.
+    """
+
+    PADDED = (" ats ", " kv ", "hooneautomaatika")
+
+    def test_it_does_not_match_inside_a_longer_word(self):
+        # `kvaliteedijuhtimissüsteem` is the ISO 9001 clause the kit warns about: it appears
+        # in the qualification section of a large share of this register, and it contains
+        # `kv`. A stripped term turns every one of those into a hit.
+        home = Home({"a.md": "Pakkujal peab olema rakendatud kvaliteedijuhtimissüsteem\n"
+                             "vastavalt standardile ISO 9001\n"})
+        self.addCleanup(home.close)
+        scan = ee_scan.scan_home(home.path, self.PADDED)
+        self.assertEqual(scan["hits"], 0)
+
+    def test_it_still_matches_when_it_stands_alone(self):
+        home = Home({"a.md": "Paigaldatakse ATS ja valvesüsteem\n"})
+        self.addCleanup(home.close)
+        scan = ee_scan.scan_home(home.path, self.PADDED)
+        self.assertEqual(scan["term_counts"], {"ats": 1})
+
+    def test_two_padded_terms_side_by_side_are_both_found(self):
+        # They share one space. A match that consumed it would take the first and lose the
+        # second, and the count that orders the reading would be quietly short.
+        home = Home({"a.md": "ATS KV paigaldus\n"})
+        self.addCleanup(home.close)
+        scan = ee_scan.scan_home(home.path, self.PADDED)
+        self.assertEqual(scan["term_counts"], {"ats": 1, "kv": 1})
+
+    def test_a_term_inside_a_longer_term_is_not_counted_twice(self):
+        home = Home({"a.md": "Hooneautomaatika süsteem\n"})
+        self.addCleanup(home.close)
+        scan = ee_scan.scan_home(home.path, ("automaatika", "hooneautomaatika"))
+        self.assertEqual(scan["term_counts"], {"hooneautomaatika": 1})
+
+
 class ReadAndSilentIsNotTheSameAsUnread(unittest.TestCase):
 
     def test_documents_with_no_hits_still_produce_a_result(self):
