@@ -66,7 +66,7 @@ def _working_day(date):
 
 
 def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=None,
-        date_to=None):
+        date_to=None, gate="label"):
     """Fetch the window's procurements into homes and write the day's two files.
 
     `watch` is the references somebody is still deciding about — the cards whose decision has
@@ -77,6 +77,24 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     THE GATE DOES NOT APPLY TO THEM. The gate decides what is worth fetching for the first
     time; a watched procurement was already judged worth a card by a person, and dropping it
     here would silently stop answering the question the card is open for.
+
+    `gate` decides what the recall terms are allowed to do, and the default is `label`.
+
+    WHY LABEL RATHER THAN DROP, AND WHY THAT DEFAULT CHANGED. This register serves the gate
+    two texts and no more: the title, and the classification's Estonian name. There is no
+    description — the field exists and is empty on every row — and no classification code.
+    Deciding on that alone whether a procurement is worth reading meant roughly half the
+    country was never opened, and a run could not say what was in what it skipped, because
+    skipping it was the same act as not reading it. A month measured that way in September
+    2026 dropped 376 of 741 notices unread, and no report could name them.
+
+    So the terms still run, and their verdict is still recorded on every row — an unmatched
+    row is a real signal about how the word list is tuned, and losing it would be its own
+    blindness. What changed is that the verdict no longer decides whether the bytes move.
+    Precision belongs to the document-reading step, which has the documents; a title does not.
+
+    `drop` keeps the old behaviour for a caller who wants a deliberately cheap sweep, and it
+    is never what a night should ask for.
     """
     run_id = run_id or time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     date_from = date
@@ -85,7 +103,11 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     # landed knows where a three-day catch-up landed too.
     folder = date_to
 
-    targets = ee_targets.window(date_from, date_to)
+    # `survey` rather than `window`: it splits a window that would overflow the register's cap
+    # instead of raising, and it hands back the list of requests it made so the day can carry
+    # the arithmetic that proves nothing was truncated.
+    found = ee_targets.survey(date_from, date_to)
+    targets = found["rows"]
 
     # AN EMPTY WINDOW OVER WORKING DAYS IS A BROKEN CRAWL, AND NOTHING ELSE WOULD SAY SO.
     # This register publishes on the order of twenty-five notices a working day and none at
@@ -144,7 +166,13 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
         previous = _read(os.path.join(home, "state.json"))
 
         if rules is not None and not target.get("watched"):
-            if policy_mod.outside_scope(target, rules):
+            outside = policy_mod.outside_scope(target, rules)
+            # The verdict rides on the row whichever mode this is. Under `label` it is the
+            # only trace the terms leave, and it is what makes a badly tuned word list
+            # visible: a procurement the terms missed and the documents then proved ours is
+            # exactly the row that should change the list.
+            target["recall"] = "unmatched" if outside else "matched"
+            if outside and gate == "drop":
                 # Named, never merely dropped. A tender nobody fetched and nobody mentioned
                 # reads exactly like a tender that does not exist — and the list of what was
                 # cut is the fastest way to see a badly tuned word list.
@@ -176,6 +204,10 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
             # the two — "is this worth a card" and "has what I am waiting on moved" — and a
             # day that did not say which was which would make them guess from the date.
             "watched": bool(target.get("watched")),
+            # What the recall terms made of the title, recorded rather than acted on. A row
+            # marked `unmatched` that the documents then prove ours is the one row worth
+            # taking to the word list.
+            "recall": target.get("recall"),
             "title": target["title"], "buyer": target["buyer"],
             "published": target["published"], "deadline": done.get("deadline"),
             "value": done.get("value"), "cpv_main": done.get("cpv_main"),
@@ -197,6 +229,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     for row in moves:
         by_status[row["status"]] = by_status.get(row["status"], 0) + 1
     watched_count = sum(1 for row in moves if row["watched"])
+    unmatched_count = sum(1 for row in moves if row.get("recall") == "unmatched")
 
     # WHOSE FAILURE MAKES A DAY SHORT. The day is the window; a watched card is a standing
     # question somebody asked of it. A watched reference the register will not serve is a
@@ -207,15 +240,23 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
     lost_watch = [f for f in failed if f.get("watched")]
     complete = not lost_window and not discovery_failed
 
+    # HOW THE WINDOW WAS ASKED FOR, so a reader can check that it was asked for whole. Each
+    # slice is one request with the rows it returned; none of them may be at the cap, because
+    # a request that came back at the cap was cut and `survey` would have split it instead.
+    discovery = {"requests": found["requests"], "cap": found["cap"],
+                 "slices": found["slices"], "at_cap": found["at_cap"],
+                 "rows": len(targets), "gate": gate}
+
     common = {"date": folder, "window": {"from": date_from, "to": date_to},
               "country": "EE", "run_id": run_id,
               "written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-              "complete": complete, "discovery_failed": discovery_failed}
+              "complete": complete, "discovery_failed": discovery_failed,
+              "discovery": discovery}
 
     changes = dict(common, **{
         "schema": "day-changes/1",
         "counts": dict(by_status, tenders=len(moves), gated=len(gated),
-                       watched=watched_count),
+                       watched=watched_count, recall_unmatched=unmatched_count),
         "gated": gated,
         "tenders": moves,
     })
@@ -229,7 +270,7 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
                      "gated": len(gated), "failed": len(lost_window),
                      "watch_holes": len(lost_watch)},
         "counts": dict(by_status, tenders=len(delivered), gated=len(gated),
-                       watched=watched_count,
+                       watched=watched_count, recall_unmatched=unmatched_count,
                        documents=sum(t["documents"] for t in delivered),
                        bytes=sum(t["bytes"] for t in delivered)),
         "lost": failed,
@@ -249,10 +290,14 @@ def main(argv=None):
     ap.add_argument("--policy", default=None,
                     help="recall policy: JSON, a path to one, or EE_POLICY from the "
                          "environment. Absent means fetch everything.")
+    ap.add_argument("--gate", choices=("label", "drop"), default="label",
+                    help="what the recall terms may do. label (default) records their verdict "
+                         "on every row and fetches the window whole; drop is the old cheap "
+                         "sweep that never opens what the terms missed.")
     args = ap.parse_args(argv)
     day, changes = run(args.date, args.out, args.limit,
                        keep=(args.only,) if args.only else None, policy=args.policy,
-                       date_to=args.to)
+                       date_to=args.to, gate=args.gate)
     print("%s..%s: %d/%d delivered, %d gated, %d document(s), %.1f MB — %s"
           % (day["window"]["from"], day["window"]["to"],
              day["coverage"]["delivered"], day["coverage"]["targets"],

@@ -104,23 +104,25 @@ jobs:
           EIS_COUNTRY: EE
         run: python3 deliver_ee.py --check
 
-      # THE GATE IS CHECKED BEFORE THE REGISTER IS TOUCHED, AND THIS IS WHY IT IS A STEP.
+      # THE TERMS ARE CHECKED BEFORE THE REGISTER IS TOUCHED, AND THIS IS WHY IT IS A STEP.
       # `policy.load_policy` fails open on purpose — an unreadable policy returns None rather
       # than dropping every procurement, which is the right call inside a library. For an
-      # unattended night it is the wrong outcome: no gate means fetching every archive the
-      # window holds from a state register, because a secret was misspelt.
-      - name: The recall policy, and how much of the window it lets through
+      # unattended night it is still the wrong outcome, though the cost has moved. The window
+      # is fetched whole now, so a missing policy no longer changes WHAT is fetched; it
+      # silently strips the recall verdict off every row, and the one signal that says the
+      # word list wants widening disappears without anything failing.
+      - name: The recall terms, and what they make of the window
         env:
           EE_POLICY: ${{ secrets.EE_POLICY }}
         run: |
           # THE SECRET IS REQUIRED, AND FALLING BACK TO THE COMMITTED FILE WOULD BE WORSE THAN
           # STOPPING. `ee_policy.example.json` is an unrelated illustration — office printing —
           # chosen so the repository discloses nothing about what anybody actually hunts for.
-          # A night run against it would fetch almost nothing, deliver a valid day, and report
-          # success, which is the one failure shape nobody catches: an empty morning reads
-          # exactly like a quiet one.
+          # A night run against it would label every real procurement `unmatched` and every
+          # irrelevant one `matched`, deliver a valid day, and report success — the one failure
+          # shape nobody catches, because the day still looks complete and it now IS complete.
           if [ -z "$EE_POLICY" ]; then
-            echo "::error::no EE_POLICY secret. The committed example is an unrelated illustration and would produce an almost empty night that looks like a successful one."
+            echo "::error::no EE_POLICY secret. The terms no longer decide what is fetched — the window is fetched whole — but they still label every row, and the committed example is an unrelated illustration that would label the night nonsense."
             exit 1
           fi
           printf '%s' "$EE_POLICY" > policy.json
@@ -131,13 +133,14 @@ jobs:
           if rules is None:
               # WHICH OF THE TWO, because they are different mistakes wearing one symptom.
               # A policy that does not parse arrived broken; one that parses and carries no
-              # rule arrived empty, truncated, or renamed around. Both fetch the whole window
-              # ungated, and the person fixing it at 04:00 should not have to guess which.
+              # rule arrived empty, truncated, or renamed around. Both leave the night without
+              # a verdict on any row, and the person fixing it at 04:00 should not have to
+              # guess which.
               try:
                   json.load(open('policy.json', encoding='utf-8'))
               except ValueError as bad:
-                  sys.exit('the recall policy did not parse (%s) — refusing to fetch the whole window ungated' % bad)
-              sys.exit('the recall policy parsed but carries no rule — refusing to fetch the whole window ungated')
+                  sys.exit('the recall policy did not parse (%s) — refusing to label the night with a broken word list' % bad)
+              sys.exit('the recall policy parsed but carries no rule — refusing to label the night with an empty word list')
           # READ BY POSITION, NEVER UNPACKED. A fixed-width unpack here breaks the night the
           # day the policy grows a field, and this step exists to protect the night.
           names = ('recall term', 'excluded division', 'excluded title term',
