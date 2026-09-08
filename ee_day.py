@@ -173,6 +173,17 @@ def run(date, out_root, limit=None, keep=None, run_id=None, policy=None, watch=N
 
         if rules is not None and not target.get("watched"):
             outside = policy_mod.outside_scope(target, rules)
+            # A DELIBERATE EXCLUSION STILL STOPS THE DOWNLOAD, IN EITHER MODE. Parking is
+            # another brand's line of business, not a judgement about the tender, and the
+            # kit says so. Until this line existed `label` fetched it too, because the one
+            # verdict below cannot tell "ruled out by name" from "the words did not match".
+            if policy_mod.excluded(target, rules):
+                gated.append({"pid": pid, "ref": target["ref"], "kind": target["kind"],
+                              "title": target["title"], "buyer": target["buyer"],
+                              "cpv_name": target["cpv_name"],
+                              "reason": "excluded by name",
+                              "link": ee_page.VIEW % pid})
+                continue
             # The verdict rides on the row whichever mode this is. Under `label` it is the
             # only trace the terms leave, and it is what makes a badly tuned word list
             # visible: a procurement the terms missed and the documents then proved ours is

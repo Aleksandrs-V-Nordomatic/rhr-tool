@@ -62,7 +62,12 @@ import deliver_graph as graph
 # address for anyone who wants the original itself. The raw archive stays behind for the same
 # reason, and its name is reused for the archive of what did travel: a reader that takes
 # `<pid>.zip` wants the procurement readable in one request, not a folder of .docx.
-FLAT = ("procurement.json", "manifest.json")
+# `scan.json` says where the caller's vocabulary occurs inside this procurement's text,
+# and it is written after the index rather than before it. It has to travel with the home:
+# the runner that produced it is destroyed at the end of the job, so a file left behind
+# there is a file nobody will ever read. It was left out of this list when the scan was
+# added, which made the whole step invisible to the only reader it exists for.
+FLAT = ("procurement.json", "manifest.json", "scan.json")
 NORMALIZED = "normalized/manifest_normalized.json"
 
 

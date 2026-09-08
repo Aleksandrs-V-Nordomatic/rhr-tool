@@ -188,6 +188,41 @@ def cpv_codes(notice):
     return [c.strip() for c in codes if c and c.strip()]
 
 
+def excluded(notice, policy):
+    """Is this notice ruled out by name, rather than merely unmatched by the terms?
+
+    TWO QUESTIONS THAT USED TO SHARE ONE ANSWER, AND THE COST OF THAT. `outside_scope`
+    returns True both for a notice the caller excluded deliberately — parking, which is
+    another brand's line of business — and for one whose title simply carries none of the
+    recall words. Those are opposite statements: the first is "we know this is not ours",
+    the second is "we have not looked". While the terms decided what to fetch, one boolean
+    was enough, because both meant *do not download*.
+
+    They stopped meaning the same thing on 8 Sep 2026, when the window began to be fetched
+    whole and the terms became a label. A caller that wants to keep dropping the deliberate
+    exclusions and stop dropping the unmatched needs to tell them apart, and could not: the
+    Estonian kit said parking was still excluded, and in production nothing was, because
+    `ee_day` had only the one verdict to act on.
+
+    This answers the first question alone. `outside_scope` is unchanged and still answers
+    the old one, so a caller that wants the cheap sweep keeps exactly what it had.
+    """
+    if not policy:
+        return False
+    exclude_prefixes, exclude_title_terms = policy[1], policy[2]
+    override_prefixes = policy[3] if len(policy) > 3 else ()
+
+    title = haystack(notice)
+    if title and any(term in title for term in exclude_title_terms):
+        return True
+
+    codes = cpv_codes(notice)
+    overridden = bool(override_prefixes) and any(c.startswith(override_prefixes)
+                                                 for c in codes)
+    return bool(codes and exclude_prefixes and not overridden
+                and all(c.startswith(exclude_prefixes) for c in codes))
+
+
 def outside_scope(notice, policy):
     """Should this notice be excluded before any documents are fetched?"""
     if not policy:
@@ -197,18 +232,11 @@ def outside_scope(notice, policy):
     override_prefixes = policy[3] if len(policy) > 3 else ()
     recall_prefixes = policy[4] if len(policy) > 4 else ()
 
-    title = haystack(notice)
-    if title and any(term in title for term in exclude_title_terms):
+    if excluded(notice, policy):
         return True
 
+    title = haystack(notice)
     codes = cpv_codes(notice)
-    # An override is read anyway, wherever its division sits. The gate asks what the buyer
-    # classified this as; whether the work is ours is a later and different question.
-    overridden = bool(override_prefixes) and any(c.startswith(override_prefixes)
-                                                 for c in codes)
-    if (codes and exclude_prefixes and not overridden
-            and all(c.startswith(exclude_prefixes) for c in codes)):
-        return True
 
     # A CODE CAN RECALL, AND IT IS ASKED BEFORE THE TITLE. The exclusions above still
     # bind — an excluded title term or an all-excluded code set has already returned — so
