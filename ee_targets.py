@@ -122,15 +122,14 @@ def _row(record):
     }
 
 
-def window(date_from, date_to=None, session=None):
-    """Every procurement the register published in the window, both ends inclusive.
+def _window_once(date_from, date_to, session=None):
+    """One request for one window. Raises `Truncated` if the register cut the answer.
 
     The register's own range is exclusive at the start, so a day earlier is asked for and the
     answer is then checked against the days the CALLER meant. That check is not belt and
     braces: it is the only thing standing between a filter this API silently ignores and a
     day that contains the whole register.
     """
-    date_to = date_to or date_from
     wanted = set(days(date_from, date_to))
     begin = (datetime.date(*(int(p) for p in date_from.split("-")))
              - datetime.timedelta(days=1)).isoformat()
@@ -151,6 +150,68 @@ def window(date_from, date_to=None, session=None):
             seen.add(pid)
             out.append(_row(record))
     return out
+
+
+def survey(date_from, date_to=None, session=None):
+    """Every procurement the window published, and the proof that none was cut.
+
+    The register answers a window in one request and says nothing when it truncates: five
+    hundred rows is the cap, and the rows past it are named nowhere. `_search` raises rather
+    than returning a short answer, which is the honest thing to do with an answer that cannot
+    describe its own gap — but a raise ends the run, and the caller is then left to guess a
+    narrower window by hand and ask again. That is not a theoretical cost: it is why a month
+    of this register was fetched as six hand-cut weeks, with the widths chosen by a person who
+    had to know the country's publication rate to choose them.
+
+    So the cap is answered here instead. A window that comes back cut is split down the middle
+    and each half asked for on its own, and again, until every piece is under the cap. Nobody
+    outside has to know how much the register publishes.
+
+    THE SLICES ARE RETURNED, AND THAT IS THE POINT. A day that merely says `complete: true`
+    is asking to be believed. One that carries the list of requests it made, each with the
+    number of rows it brought back, can be checked by a reader adding them up and seeing that
+    no request came back at the cap. Completeness stops being a claim and becomes arithmetic.
+
+    A single day that still hits the cap cannot be split further, and that raises. It should:
+    the endpoint cannot answer for that day at all, and no arrangement of requests here would
+    change it.
+    """
+    date_to = date_to or date_from
+    session = session or ee_page.session()
+    rows, seen, slices = [], set(), []
+
+    def take(lo, hi):
+        try:
+            found = _window_once(lo, hi, session)
+        except Truncated:
+            span = days(lo, hi)
+            if len(span) < 2:
+                raise Truncated(
+                    "%s alone fills the register's %d-row cap, so the day cannot be asked for "
+                    "in pieces and what it dropped is named nowhere." % (lo, CAP))
+            half = len(span) // 2
+            take(span[0], span[half - 1])
+            take(span[half], span[-1])
+            return
+        slices.append({"from": lo, "to": hi, "rows": len(found)})
+        for row in found:
+            if row["pid"] and row["pid"] not in seen:
+                seen.add(row["pid"])
+                rows.append(row)
+
+    take(date_from, date_to)
+    slices.sort(key=lambda s: s["from"])
+    return {"rows": rows, "slices": slices, "cap": CAP,
+            "requests": len(slices), "at_cap": [s for s in slices if s["rows"] >= CAP]}
+
+
+def window(date_from, date_to=None, session=None):
+    """Every procurement the register published in the window, both ends inclusive.
+
+    Kept as the plain question most callers ask. `survey` is the same walk with its working
+    shown; a caller that has to prove the window was whole wants that one.
+    """
+    return survey(date_from, date_to, session)["rows"]
 
 
 def day(date, session=None):

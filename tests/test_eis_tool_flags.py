@@ -27,13 +27,15 @@ class Recorder(object):
         self.calls = []
 
     def run(self, date, out, limit=None, keep=None, run_id=None, policy=None, watch=None,
-            date_to=None):
+            date_to=None, gate="label"):
         self.calls.append({"date": date, "out": out, "limit": limit, "policy": policy,
-                           "watch": watch, "date_to": date_to})
+                           "watch": watch, "date_to": date_to, "gate": gate})
         return ({"date": date, "complete": True,
                  "window": {"from": date, "to": date_to or date},
                  "coverage": {"delivered": 0, "targets": 0, "gated": 0, "failed": 0},
-                 "counts": {"documents": 0}}, {})
+                 "counts": {"documents": 0, "tenders": 0, "recall_unmatched": 0},
+                 "discovery": {"requests": 1, "discovered": 0, "worked": 0, "slices": [],
+                               "at_cap": [], "gate": gate}}, {})
 
 
 class DayPassesWhatItWasGiven(unittest.TestCase):
@@ -56,6 +58,15 @@ class DayPassesWhatItWasGiven(unittest.TestCase):
 
     def test_the_limit_reaches_the_run(self):
         self.assertEqual(self.call("--limit", "7")["limit"], 7)
+
+    def test_a_night_fetches_the_window_whole_unless_it_is_asked_not_to(self):
+        # The default is the whole point of the flag existing. A night that quietly reverted
+        # to `drop` would look exactly like a night with a thin country, which is the failure
+        # this pair of modes was introduced to end.
+        self.assertEqual(self.call()["gate"], "label")
+
+    def test_the_cheap_sweep_is_still_available_by_asking(self):
+        self.assertEqual(self.call("--gate", "drop")["gate"], "drop")
 
     def test_the_watch_list_reaches_the_run_as_bare_ids(self):
         self.assertEqual(self.call("--targets", "RHR:11, 22")["watch"], ["11", "22"])
@@ -90,11 +101,14 @@ class AShortDayNamesWhatItLost(unittest.TestCase):
 
     @staticmethod
     def short(date, out, limit=None, keep=None, run_id=None, policy=None, watch=None,
-              date_to=None):
+              date_to=None, gate="label"):
         return ({"date": date, "complete": False,
                  "window": {"from": date, "to": date_to or date},
                  "coverage": {"delivered": 5, "targets": 41, "gated": 35, "failed": 1},
-                 "counts": {"documents": 30},
+                 "counts": {"documents": 30, "tenders": 41, "recall_unmatched": 20},
+                 "discovery": {"requests": 2, "discovered": 41, "worked": 41,
+                               "slices": [{"from": date, "to": date, "rows": 41}],
+                               "at_cap": [], "gate": gate},
                  "lost": [{"ref": "314707", "pid": "10739244", "kind": None,
                            "watched": True,
                            "reason": "no procurement with this reference"}]}, {})

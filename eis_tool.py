@@ -130,6 +130,11 @@ def main(argv=None):
                         "not publish it again")
     p.add_argument("--out", default="work")
     p.add_argument("--limit", type=int, default=None, help="stop after this many, for a trial")
+    p.add_argument("--gate", choices=("label", "drop"), default="label",
+                   help="what the recall terms may do. label (default) records their verdict "
+                        "on every row and still fetches the window whole; drop is the old "
+                        "cheap sweep that never opens what the terms missed, and it cannot "
+                        "say what was in what it skipped.")
     p.add_argument("--policy", default=None,
                    help="recall policy: JSON, a path to one, or EE_POLICY from the "
                         "environment. Absent means fetch everything.")
@@ -218,11 +223,25 @@ def main(argv=None):
         import ee_day
         out = os.path.join(args.out, code)
         day, _ = ee_day.run(args.date, out, args.limit, policy=args.policy,
-                            watch=read_targets(args.targets), date_to=args.to)
+                            watch=read_targets(args.targets), date_to=args.to,
+                            gate=args.gate)
+        disc = day.get("discovery") or {}
         print("%s %s..%s: %d/%d delivered, %d document(s) -> %s"
               % (code, day["window"]["from"], day["window"]["to"],
                  day["coverage"]["delivered"], day["coverage"]["targets"],
                  day["counts"]["documents"], out))
+        # THE ARITHMETIC OF THE WINDOW, printed because "complete" is otherwise a word the run
+        # applies to itself. The requests are the slices the register was asked for; none of
+        # them may sit at the cap, because one that did was cut and would have been split.
+        sliced = sum(s["rows"] for s in (disc.get("slices") or []))
+        worked = disc.get("worked", 0)
+        print("  window: %d request(s), %d row(s) named%s, %d at the cap; recall matched %d, "
+              "unmatched %d, gate=%s"
+              % (disc.get("requests", 0), sliced,
+                 "" if worked == disc.get("discovered", worked) else " (%d worked)" % worked,
+                 len(disc.get("at_cap") or []),
+                 day["counts"]["tenders"] - day["counts"].get("recall_unmatched", 0),
+                 day["counts"].get("recall_unmatched", 0), disc.get("gate", "?")))
         # NAMED, NOT COUNTED. "5 of 41" is also what a heavily gated day looks like, so a
         # short day that only reported a number would be indistinguishable from a normal one.
         # The exit code says the day is short; these lines say which procurements and why,
