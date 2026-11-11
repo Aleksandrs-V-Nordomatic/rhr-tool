@@ -341,6 +341,28 @@ falling back: run against the example it would fetch almost nothing, deliver a v
 report success, and an empty morning reads exactly like a quiet one. A sibling country's secret
 name set here stops the run for the same reason, rather than loading nothing and fetching all.
 
+## Procurement plans
+
+A notice is the last public moment of a procurement; the plan is the first. `ee_plans.py` reads
+two published plans every night, after the window is delivered:
+
+| source | address | measured 11 Nov 2026 |
+|---|---|---|
+| RHR open data | `riigihanked.riik.ee/rhr/api/public/v1/procurement-plans/procurement-plans/opendata/xml?year=` | 431 plans for 2026 |
+| RKAS | `www.rkas.ee/et/rkas-hankeplaan-export` (XLSX) | 133 rows, with the expected bid date |
+
+```
+work/EE/plans/
+  <date>/plans.json     the snapshot: every plan, keyed RHR-PLAN:<HP…> or RKAS-PLAN:<digest>
+  <date>/changes.json   new, gone and changed against the previous snapshot on the drive
+  latest.json           what tomorrow compares against — written last
+```
+
+**The responsible person and their e-mail are dropped at reading** and never reach a file. RKAS's
+export has no number, so its key is a digest of the folded name and procedure: a renamed row is a
+plan gone and a plan new. A source that did not answer withdraws nothing from the diff. The step
+never fails the night and logs counts only.
+
 ## Scans, and the account this does not need
 
 There is no model in extraction. `assist.py` is a quarantined fallback that reads **only** the

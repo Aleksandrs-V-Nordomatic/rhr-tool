@@ -209,3 +209,25 @@ jobs:
           GRAPH_DEST_ROOT: ${{ secrets.GRAPH_DEST_ROOT }}
           EIS_COUNTRY: EE
         run: python3 deliver_ee.py --out work --date "$DAY_TO"
+
+      # WHAT BUYERS SAY THEY WILL BUY, months before a notice: the register's plan open data
+      # and RKAS's own plan, as a dated snapshot and a diff against yesterday's on the drive.
+      # It may never fail the run -- a night whose plans did not arrive delivered its window
+      # exactly as before -- and it prints counts only. See ee_plans.
+      - name: Read and deliver the procurement plans
+        if: ${{ always() && env.HAVE_GRAPH == 'true' }}
+        env:
+          HAVE_GRAPH: ${{ secrets.GRAPH_DRIVE_ID != '' }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          GRAPH_DRIVE_ID: ${{ secrets.GRAPH_DRIVE_ID }}
+          GRAPH_DEST_ROOT: ${{ secrets.GRAPH_DEST_ROOT }}
+          EIS_COUNTRY: EE
+        run: |
+          # Named once: a run that crossed midnight between the two would collect one date and
+          # deliver another.
+          PLANS_DAY="$(date -u +%F)"
+          python3 ee_plans.py collect --out work --date "$PLANS_DAY" \
+            && python3 ee_plans.py deliver --out work --date "$PLANS_DAY" \
+            || echo "::warning::the procurement plans did not arrive tonight; the window is unaffected"
