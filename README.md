@@ -363,6 +363,16 @@ export has no number, so its key is a digest of the folded name and procedure: a
 plan gone and a plan new. A source that did not answer withdraws nothing from the diff. The step
 never fails the night and logs counts only.
 
+## Below the register: hange.ee
+
+Under the simple-procurement threshold nothing has to be published, and hange.ee is the one
+aggregator that collects it. `ee_hange.py` reads its two public lists every night:
+**Hanketeated**, notices its staff type in from buyers' own sites (86 in 30 days, legal persons
+only), and the **active requests** buyers post themselves. Lists only: a notice's detail and the
+buyer's contacts are paid, and nothing behind the list is downloaded. Private persons' requests,
+three in four, are skipped at reading. Output is `work/EE/hange/<date>/{hange,changes}.json` and
+`hange/latest.json`, in the same snapshot-and-diff shape as the plans.
+
 ## Scans, and the account this does not need
 
 There is no model in extraction. `assist.py` is a quarantined fallback that reads **only** the
