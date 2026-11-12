@@ -153,11 +153,55 @@ def coordinate(name, value, pattern=None):
 TENANT = re.compile(r"^[0-9a-fA-F-]{36}$")
 
 
+class Token:
+    """An access token that asks for a fresh one before the old one runs out.
+
+    A client-credentials token lives sixty to ninety minutes, and a month's catch-up spends
+    longer than that in delivery alone. Holding the first token for the whole step is how the
+    12 Nov 2026 backfill died 65 minutes into its uploads with a 401 that no retry could fix.
+    So the token is renewed after `RENEW_AFTER` seconds, well inside the shortest lifetime,
+    and once more on a 401 in case the tenant cut it short.
+
+    The first token is fetched in the constructor, so bad coordinates still fail at the
+    start, before a single file is read.
+    """
+
+    RENEW_AFTER = 45 * 60
+
+    def __init__(self, fetch, clock=time.monotonic):
+        self._fetch = fetch
+        self._clock = clock
+        self.renew()
+
+    def renew(self):
+        self._value = self._fetch()
+        self._at = self._clock()
+
+    def value(self):
+        if self._clock() - self._at >= self.RENEW_AFTER:
+            self.renew()
+        return self._value
+
+
+def bearer(tok):
+    """The Authorization header's value, for a `Token` or a bare token string."""
+    return "Bearer " + (tok.value() if isinstance(tok, Token) else tok)
+
+
+def renewed_after_401(tok, code, done):
+    """True when a 401 is worth one more attempt: the token can be renewed, and was not yet."""
+    if code != 401 or done or not isinstance(tok, Token):
+        return False
+    tok.renew()
+    return True
+
+
 def graph_token():
     """The access token, from coordinates checked before they are spent on a request."""
-    return token(coordinate("GRAPH_TENANT_ID", env("GRAPH_TENANT_ID"), TENANT),
-                 coordinate("GRAPH_CLIENT_ID", env("GRAPH_CLIENT_ID")),
-                 env("GRAPH_CLIENT_SECRET"))
+    tenant = coordinate("GRAPH_TENANT_ID", env("GRAPH_TENANT_ID"), TENANT)
+    client_id = coordinate("GRAPH_CLIENT_ID", env("GRAPH_CLIENT_ID"))
+    secret = env("GRAPH_CLIENT_SECRET")
+    return Token(lambda: token(tenant, client_id, secret))
 
 
 def token(tenant, client_id, client_secret):
@@ -179,7 +223,7 @@ def escaped(path):
     return "/".join(urllib.parse.quote(p, safe="") for p in path.split("/"))
 
 
-def get(url, tok, tries=4):
+def get(url, tok, tries=net.TRIES + 1):
     """One GET, retried on the codes Graph returns under load. Bytes, or None for absent.
 
     READING THE DRIVE IS HOW THIS DELIVERY REMEMBERS. A run has no memory of the one before
@@ -191,16 +235,24 @@ def get(url, tok, tries=4):
 
     A 404 is the ordinary first answer for every tender nobody has fetched before, so it is
     a value and not an error.
+
+    Six tries, not four: the second attempt at the 12 Nov 2026 backfill lost 34 minutes of
+    delivery to four transport errors in a row on one read, about 25 seconds of waiting in
+    all. The fifth and sixth wait 40 seconds each, which outlasts an ordinary network blip.
     """
+    renewed = False
     for attempt in range(tries):
         req = urllib.request.Request(url)
-        req.add_header("Authorization", "Bearer " + tok)
+        req.add_header("Authorization", bearer(tok))
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return None
+            if attempt < tries - 1 and renewed_after_401(tok, e.code, renewed):
+                renewed = True
+                continue
             if e.code in RETRY and attempt < tries - 1:
                 wait = int(e.headers.get("Retry-After") or (2 ** attempt))
                 time.sleep(min(wait, 60))
@@ -250,14 +302,18 @@ def put(url, data, tok, content_type="application/octet-stream", tries=5):
     of thousand of them in a row. Honouring the header is the difference between a delivery
     that finishes and one that half-finishes.
     """
+    renewed = False
     for attempt in range(tries):
         req = urllib.request.Request(url, data=data, method="PUT")
-        req.add_header("Authorization", "Bearer " + tok)
+        req.add_header("Authorization", bearer(tok))
         req.add_header("Content-Type", content_type)
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 return r.status
         except urllib.error.HTTPError as e:
+            if attempt < tries - 1 and renewed_after_401(tok, e.code, renewed):
+                renewed = True
+                continue
             if e.code in RETRY and attempt < tries - 1:
                 wait = int(e.headers.get("Retry-After") or (2 ** attempt))
                 time.sleep(min(wait, 60))
@@ -286,7 +342,7 @@ def upload_stream(drive, dest, stream, size, tok):
         "%s/drives/%s/root:/%s:/createUploadSession" % (GRAPH, drive, safe),
         data=json.dumps({"item": {"@microsoft.graph.conflictBehavior": "replace"}}).encode(),
         method="POST")
-    req.add_header("Authorization", "Bearer " + tok)
+    req.add_header("Authorization", bearer(tok))
     req.add_header("Content-Type", "application/json")
     session, _ = net.open_url(req, timeout=60, parse=json.loads)
     url = session["uploadUrl"]
